@@ -1,0 +1,57 @@
+export ORACLE_SID=+ASM1
+export ORACLE_HOME=/u01/app/11.2.0.3/grid
+export PATH=$ORACLE_HOME/bin:$PATH
+sqlplus -s "/ as sysasm" <<EOF
+set pages 999
+set linesize 200
+prompt
+prompt
+prompt =================== OVERVIEW OF ASM DISKGROUPS ==================================
+Col name format a20
+Col nr_disks format 999
+Col pctused format 9999 heading "%Usd"
+Col used format 999G999G990 heading "Used"
+Col total_mb format 999G999G990 heading "Total"
+select name, state, total_mb, (total_mb-free_mb) as used,
+       trunc(100*(total_mb-free_mb)/total_mb) as pctused,
+       (select count(*) from v\$asm_disk
+         where group_number = g.group_number) as nr_disks,
+       type
+ from v\$asm_diskgroup g
+;
+
+prompt
+prompt ==================== OVERVIEW OF ASM DISKS ======================================
+set feed off
+Col path format a40
+Col label format a20
+Col failgroup format a9
+Col diskgroup format a10
+Col state format a10
+Col total_mb format 999G999G990 heading "Total"
+Col used format 999G999G990 heading "Used"
+Col pctused format 9999 Heading "%Usd"
+Col name format a25 heading "DiskName"
+break on diskgroup skip 1
+select g.name as diskgroup, d.path, d.total_mb, (d.total_mb-d.free_mb) as used,
+       decode(d.total_mb,0,0,trunc(100*(d.total_mb-d.free_mb)/d.total_mb)) as pctused,
+       substr(d.mode_status,1,3) as st,
+       d.failgroup, g.state, /*substr(g.type,1,3) as red,*/ d.name
+from v\$asm_disk d, v\$asm_diskgroup g
+Where d.group_number = g.group_number(+)
+Order by g.name, d.path;
+
+prompt
+prompt
+prompt =================== OVERVIEW OF ASM OPERATIONS ==================================
+Col name format a15
+select g.name, o.operation, o.state, o.sofar, o.est_work, o.est_minutes, power
+ from v\$asm_diskgroup g, v\$asm_operation o
+ where o.group_number = g.group_number
+;
+
+
+prompt
+exit;
+EOF
+
