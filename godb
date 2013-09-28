@@ -1,6 +1,6 @@
 #!/bin/bash
 
-### Use the db name given as argument or default to DHWPRD and ask confirmation
+### Use the db unique name given as argument or default to DHWPRD and ask confirmation
 if [ $# -eq 1 ]
 then
   ORAENV_ASK=NO
@@ -14,7 +14,8 @@ fi
 . /usr/local/bin/oraenv -s
 
 ### this is a rac environment, so set the ORACLE_SID to the instance name instead of the DB name
-### store the dbname in the ORA_DBNAME variable
-export ORA_DBNAME=${ORACLE_SID}
+### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
+export ORA_DBNAME=`srvctl config database -d ${ORACLE_SID} | grep "Database name" | cut -d' ' -f3`
+export ORACLE_UNQNAME=${ORACLE_SID}
 export ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
 

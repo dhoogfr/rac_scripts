@@ -7,7 +7,8 @@ ORAENV_ASK=NO
 
 ### trim the number from the ORACLE_SID to get the cluster name
 ORA_DBNAME=`echo ${ORACLE_SID} |tr -d [:digit:]`
-export ORA_DBNAME
+ORACLE_UNQNAME=${ORA_DBNAME}
+export ORA_DBNAME ORACLE_UNQNAME
 
 ### call oraenv to set the environment
 . /usr/local/bin/oraenv -s
