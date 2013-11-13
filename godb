@@ -15,7 +15,14 @@ fi
 
 ### this is a rac environment, so set the ORACLE_SID to the instance name instead of the DB name
 ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
-export ORA_DBNAME=`srvctl config database -d ${ORACLE_SID} | grep "Database name" | cut -d' ' -f3`
+ORA_DBNAME=`srvctl config database -d ${ORACLE_SID} | grep "Database name" | cut -d' ' -f3`
+### The db name is not mandatory in the cluster config if it does not differ from the unique name
+### So, when it is empty, set it to the unique name (which is at this point still stored in ORACLE_SID)
+if [ "${ORA_DBNAME}" == "" ]
+then
+  ORA_DBNAME=${ORACLE_SID}
+fi
+export ORA_DBNAME
 export ORACLE_UNQNAME=${ORACLE_SID}
 export ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
 
