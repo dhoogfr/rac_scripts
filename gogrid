@@ -12,7 +12,18 @@ then
   unset ORA_DBNAME
   unset ORACLE_UNQNAME
   
-  ### the following was nicked from the oraenv script and clears the old home from the path and enters the new home
+  ### the following was nicked from the oraenv script and reset the LD_LIBRARY_PATH and PATH variables
+  
+  ###Reset LD_LIBRARY_PATH
+  case ${LD_LIBRARY_PATH:-""} in
+      *$OLDHOME/lib*)     LD_LIBRARY_PATH=`echo $LD_LIBRARY_PATH | \
+                              sed "s;$OLDHOME/lib;$ORACLE_HOME/lib;g"` ;;
+      *$ORACLE_HOME/lib*) ;;
+      "")                 LD_LIBRARY_PATH=$ORACLE_HOME/lib ;;
+      *)                  LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH ;;
+  esac
+  export LD_LIBRARY_PATH
+
   case "$OLDHOME" in
     "") OLDHOME=$PATH ;;        #This makes it so that null OLDHOME can't match
   esac                            #anything in next case statement
