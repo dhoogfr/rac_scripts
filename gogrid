@@ -3,16 +3,44 @@
 ### Get the ASM instance for this node from the /etc/oratab file
 ### The asm entry is maintained by the grid agent
 ORACLE_SID=`grep +ASM /etc/oratab | cut -d':' -f1`
-ORAENV_ASK=NO
+if [ "${ORACLE_SID}" == "" ]
+then
+  ### no ASM instance found, assume clusterware installed without ASM
+  OLDHOME=${ORACLE_HOME}
+  ORACLE_HOME=`awk -F'=' '/^crs_home=/ {print $2}' /etc/oracle/olr.loc`
+  export ORACLE_HOME
+  unset ORA_DBNAME
+  unset ORACLE_UNQNAME
+  
+  ### the following was nicked from the oraenv script and clears the old home from the path and enters the new home
+  case "$OLDHOME" in
+    "") OLDHOME=$PATH ;;        #This makes it so that null OLDHOME can't match
+  esac                            #anything in next case statement
 
-### trim the number from the ORACLE_SID to get the cluster name
-ORA_DBNAME=`echo ${ORACLE_SID} |tr -d [:digit:]`
-ORACLE_UNQNAME=${ORA_DBNAME}
-export ORA_DBNAME ORACLE_UNQNAME
+  case "$PATH" in
+    *$OLDHOME/bin*)     PATH=`echo $PATH | \
+                              sed "s;$OLDHOME/bin;$ORACLE_HOME/bin;g"` ;;
+    *$ORACLE_HOME/bin*) ;;
+    *:)                 PATH=${PATH}$ORACLE_HOME/bin: ;;
+    "")                 PATH=$ORACLE_HOME/bin ;;
+    *)                  PATH=$PATH:$ORACLE_HOME/bin ;;
+  esac
+  export PATH 
 
-### call oraenv to set the environment
-. /usr/local/bin/oraenv -s
+  ### set the ORACLE_BASE (unset it first otherwise the orabase utility will just return the current value)
+  unset ORACLE_BASE
+  ORACLE_BASE=`$ORACLE_HOME/bin/orabase`
+  export ORACLE_BASE
+else
+  ### trim the number from the ORACLE_SID to get the cluster name
+  ORA_DBNAME=`echo ${ORACLE_SID} |tr -d [:digit:]`
+  ORACLE_UNQNAME=${ORA_DBNAME}
+  export ORA_DBNAME ORACLE_UNQNAME
 
-### Cleanup
-unset ORAENV_ASK
+  ### call oraenv to set the environment
+  ORAENV_ASK=NO
+  . /usr/local/bin/oraenv -s
 
+  ### Cleanup
+  unset ORAENV_ASK
+fi
