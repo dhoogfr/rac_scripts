@@ -1,14 +1,14 @@
 #!/bin/bash
 
-### Use the db unique name given as argument or default to DHWPRD and ask confirmation
-if [ $# -eq 1 ]
+### Use the db unique name given as argument
+if [ $# -ne 1 ]
 then
-  ORAENV_ASK=NO
-  ORACLE_SID=$1
-else
-  ORAENV_ASK=YES
-  ORACLE_SID=DWHPRD
+  echo "usage: godb <db_unique_name>"
+  exit -1
 fi
+
+ORAENV_ASK=NO
+ORACLE_SID=$1
 
 ### call oraenv to set the environment
 . /usr/local/bin/oraenv -s
