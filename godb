@@ -1,5 +1,26 @@
 #!/bin/bash
 
+### This script sets the oracle environment variables, based upon the settings in the /etc/oratab file and the configuration in the Grid Infrastructure.
+### It can be used on every (linux) setup where the GI is installed (rac, rac one node, oracle restart).
+### To use it you source the script and pass it the db unique name of the database for which you want the env variables to be set (. godb <db_unique_name>)
+###
+### It should not be used to setup the env variables for the GI infrastructure itself.
+### Use the gogrid script for this instead
+###
+###
+### This script extends the oraenv script from Oracle (which it uses internally) by allowing you to pass the db unique name (which oracle sets in the /etc/oratab file),
+### while it also sets the ORACLE_SID to the actual instance name (instead of the db unique name)
+### This makes it especially usefull for Oracle RAC and Oracle RAC One Node, but it also can be used in Oracle Restart environments or for single instance databases on RAC environments
+###
+###
+### The environment variable set are:
+###   - ORA_DBNAME:       Oracle database name
+###   - ORACLE_UNQNAME:   The oracle db unique name
+###   - ORACLE_SID:       The oracle instance name on this node
+###   - ORACLE_BASE:      The oracle db base directory for the given db
+###   - ORACLE_HOME:      The oracle home directory for the given db
+###   - PATH:             Removes the existing $ORACLE_HOME/bin from the PATH and adds the new $ORACLE_HOME/bin to it
+
 ### location of the oraenv script, normally in /usr/local/bin, but can differ
 _ORAENV=/usr/local/bin/oraenv
 
@@ -63,7 +84,7 @@ else
   unset ORA_INSTANCE
   unset ORA_TYPE
   unset _ORAENV
-
+  
   ### export the set oracle variables
   export ORACLE_UNQNAME ORA_DBNAME ORACLE_SID
 fi
