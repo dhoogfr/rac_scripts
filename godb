@@ -3,6 +3,7 @@
 ### This script sets the oracle environment variables, based upon the settings in the /etc/oratab file and the configuration in the Grid Infrastructure.
 ### It can be used on every (linux) setup where the GI is installed (rac, rac one node, oracle restart).
 ### To use it you source the script and pass it the db unique name of the database for which you want the env variables to be set (. godb <db_unique_name>)
+### The script expects the oraenv script to be in the /usr/local/bin directory and the oratab file in /etc/. If not change the _ORAENV and _ORATAB variable in the beginning of the script
 ###
 ### It should not be used to setup the env variables for the GI infrastructure itself.
 ### Use the gogrid script for this instead
@@ -24,25 +25,73 @@
 ### location of the oraenv script, normally in /usr/local/bin, but can differ
 _ORAENV=/usr/local/bin/oraenv
 
-### Use the db unique name given as argument
-if [ $# -ne 1 ]
-then
-  echo "usage: godb <db_unique_name>"
-  ### don't use exit as the script is sourced and exit would kill the current shell
-  return 1
-else
+### location of the oratab, normally in /etc, but can differ
+_ORATAB=/etc/oratab
 
-  ORAENV_ASK=NO
+rval=0
+
+### abuse a while loop to avoid a complicated if then construct when testing for errors, as exit can not be used in a sourced script (would kill the current shell)
+while true
+do
+
+  ### Use the db unique name given as argument
+  if [ $# -ne 1 ]
+  then
+    echo "usage: godb <db_unique_name>"
+    rval=1
+    break
+  fi
+
+  ### set ORACLE_SID to the passed argument
   ORACLE_SID=$1
-  
-  ### call oraenv to set the environment
+ 
+  ### test if oraenv exists and is executable
+  if [[ ! -x "${_ORAENV}" ]]
+  then
+    echo "oraenv script: ${_ORAENV} does not exist or is not executable by you"
+    rval=1
+    break
+  fi
+
+  ### test if the passed variable exists in the oratab file, to limit the chance that oraenv will prompt for input
+  if [[ ! -r "${_ORATAB}" ]]
+  then
+    echo "oratab file: ${_ORATAB}  does not exists or is not readable by you"
+    rval=1
+    break
+  fi
+  DB_CNT=$(egrep "^${ORACLE_SID}:" ${_ORATAB} |wc -l)
+  if [ ${DB_CNT} -ne 1 ]
+  then
+    echo "passed db unique name was not found in the ${_ORATAB} file or found more than once"
+    rval=1
+    break
+  fi
+
+  ### execute the oraenv script
+  ORAENV_ASK=NO
   . ${_ORAENV} -s
-  
+
+  ### test if srvctl exists and is executable
+  if  [[ ! -x "${ORACLE_HOME}/bin/srvctl" ]]
+  then
+    echo "srvctl could not be found or is not executable by you"
+    rval=1
+    break
+  fi
+
+  ### run srvctl and parse the output for the unique name, the db name, the instance name and the type
+  ### instance name will only be filled in when this is an single instance on RAC or Oracle Restart
+  ### db name can be null if the db name is not different from the db unique name
   eval `srvctl config database -d ${ORACLE_SID} |
           awk -F':' '
             function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
             function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
             function trim(s) { return rtrim(ltrim(s)); }
+            /Database unique name:/ {
+              $2=trim($2);
+              print "ORACLE_UNQNAME="$2" ;"
+            }
             /Database name:/ {
               $2=trim($2);
               print "ORA_DBNAME="$2" ;"
@@ -57,16 +106,22 @@ else
             }
           '
        `
+
+  ### the ORACLE_UNQNAME should always be filled in, if not, something went wrong in the srvctl command or in the parsing
+  if [ "${ORACLE_UNQNAME}" == "" ]
+  then
+    echo "Something went wrong in executing srvctl, or the output was not parsed correctly"
+    rval=1
+    break
+  fi
+
   ### The db name is not mandatory in the GI config if it does not differ from the unique name
-  ### So, when it is empty, set it to the ORACLE_SID (which is at this point still holding the passed db (unique) name)
+  ### So, when it is empty, set it to the ORACLE_UNQNAME
   if [ "${ORA_DBNAME}" == "" ]
   then
-    ORA_DBNAME=${ORACLE_SID}
+    ORA_DBNAME=${ORACLE_UNQNAME}
   fi
-  
-  ### ORACLE_SID currently contains the unique name (as needed for the oraenv script), not the instance name, so tranfer it to the ORACLE_UNQNAME
-  ORACLE_UNQNAME=${ORACLE_SID}
-  
+    
   ### Test for the type of db (rac, rac one or single instance)
   if [ "${ORA_TYPE}" == "SINGLE" ] || [ "${ORA_TYPE}" == "" ]
   then
@@ -77,14 +132,35 @@ else
     ### Oracle rac or rac OneNode
     ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
     ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
+  else
+    ### unknown GI type, don't know what to do
+    echo "Type: ${ORA_TYPE} is unknown to this script and it does not know what to do now"
+    rval=1
+    break
   fi
-  
-  ### unset some temporary variables
-  unset ORAENV_ASK
-  unset ORA_INSTANCE
-  unset ORA_TYPE
-  unset _ORAENV
+
+  ### check if ORACLE_SID has been filled in
+  if [ "${ORACLE_SID}" == "" ]
+  then
+    echo "ORACLE_SID has no value, something went wrong during parsing"
+    rval=1
+    break
+  fi
   
   ### export the set oracle variables
   export ORACLE_UNQNAME ORA_DBNAME ORACLE_SID
-fi
+
+  break
+
+done
+
+### unset some temporary variables
+unset ORAENV_ASK
+unset ORA_INSTANCE
+unset ORA_TYPE
+unset _ORAENV
+unset DB_CNT
+unset _ORATAB
+
+### return rval
+return ${rval}
