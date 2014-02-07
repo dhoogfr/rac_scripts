@@ -1,57 +1,69 @@
 #!/bin/bash
 
+### location of the oraenv script, normally in /usr/local/bin, but can differ
+_ORAENV=/usr/local/bin/oraenv
+
 ### Use the db unique name given as argument
 if [ $# -ne 1 ]
 then
   echo "usage: godb <db_unique_name>"
-  exit -1
-fi
-
-ORAENV_ASK=NO
-ORACLE_SID=$1
-
-### call oraenv to set the environment
-. /usr/local/bin/oraenv -s
-
-eval `srvctl config database -d ${ORACLE_SID} |
-        awk -F':' '
-          function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
-          function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
-          function trim(s) { return rtrim(ltrim(s)); }
-          /Database name:/ {
-            $2=trim($2);
-            print "ORA_DBNAME="$2" ;"
-          }
-          /Database instance:/ {
-            $2=trim($2);
-            print "ORA_INSTANCE="$2" ;"
-          }
-          /Type:/ {
-            $2=trim($2);
-            print "ORA_TYPE="$2" ;"
-          }
-        '
-     `
-### The db name is not mandatory in the GI config if it does not differ from the unique name
-### So, when it is empty, set it to the ORACLE_SID (which is at this point still holding the passed db (unique) name)
-if [ "${ORA_DBNAME}" == "" ]
-then
-  ORA_DBNAME=${ORACLE_SID}
-fi
-
-### ORACLE_SID currently contains the unique name (as needed for the oraenv script), not the instance name, so tranfer it to the ORACLE_UNQNAME
-ORACLE_UNQNAME=${ORACLE_SID}
-
-### Test for the type of db (rac, rac one or single instance)
-if [ "${ORA_TYPE}" == "" ]
-then
-  ### single instance, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
-  ORACLE_SID=${ORA_INSTANCE}
+  ### don't use exit as the script is sourced and exit would kill the current shell
+  return 1
 else
-  ### this is a rac environment, so grep the instance
-  ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
-  ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
-fi
 
-### export the set oracle variables
-export ORACLE_UNQNAME ORA_DBNAME ORACLE_SID
+  ORAENV_ASK=NO
+  ORACLE_SID=$1
+  
+  ### call oraenv to set the environment
+  . ${_ORAENV} -s
+  
+  eval `srvctl config database -d ${ORACLE_SID} |
+          awk -F':' '
+            function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
+            function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
+            function trim(s) { return rtrim(ltrim(s)); }
+            /Database name:/ {
+              $2=trim($2);
+              print "ORA_DBNAME="$2" ;"
+            }
+            /Database instance:/ {
+              $2=trim($2);
+              print "ORA_INSTANCE="$2" ;"
+            }
+            /Type:/ {
+              $2=trim($2);
+              print "ORA_TYPE="$2" ;"
+            }
+          '
+       `
+  ### The db name is not mandatory in the GI config if it does not differ from the unique name
+  ### So, when it is empty, set it to the ORACLE_SID (which is at this point still holding the passed db (unique) name)
+  if [ "${ORA_DBNAME}" == "" ]
+  then
+    ORA_DBNAME=${ORACLE_SID}
+  fi
+  
+  ### ORACLE_SID currently contains the unique name (as needed for the oraenv script), not the instance name, so tranfer it to the ORACLE_UNQNAME
+  ORACLE_UNQNAME=${ORACLE_SID}
+  
+  ### Test for the type of db (rac, rac one or single instance)
+  if [ "${ORA_TYPE}" == "SINGLE" ] || [ "${ORA_TYPE}" == "" ]
+  then
+    ### single instance, either on rac or oracle restart, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
+    ORACLE_SID=${ORA_INSTANCE}
+  elif [ "${ORA_TYPE}" == "RAC" ] || [ "${ORA_TYPE}" == "RACOneNode" ]
+  then
+    ### Oracle rac or rac OneNode
+    ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
+    ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
+  fi
+  
+  ### unset some temporary variables
+  unset ORAENV_ASK
+  unset ORA_INSTANCE
+  unset ORA_TYPE
+  unset _ORAENV
+
+  ### export the set oracle variables
+  export ORACLE_UNQNAME ORA_DBNAME ORACLE_SID
+fi
