@@ -26,7 +26,7 @@
 _ORAENV=/usr/local/bin/oraenv
 
 ### location of the oratab, normally in /etc, but can differ
-_ORATAB=/etc/oratab
+_ORATAB=/var/opt/oracle/oratab
 
 rval=0
 
@@ -84,7 +84,7 @@ do
   ### instance name will only be filled in when this is an single instance on RAC or Oracle Restart
   ### db name can be null if the db name is not different from the db unique name
   eval `srvctl config database -d ${ORACLE_SID} |
-          awk -F':' '
+          gawk -F':' '
             function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
             function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
             function trim(s) { return rtrim(ltrim(s)); }
@@ -131,7 +131,7 @@ do
   then
     ### Oracle rac or rac OneNode
     ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
-    ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
+    ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname \` | cut -d' ' -f2`
   else
     ### unknown GI type, don't know what to do
     echo "Type: ${ORA_TYPE} is unknown to this script and it does not know what to do now"

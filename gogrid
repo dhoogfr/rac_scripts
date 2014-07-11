@@ -2,7 +2,7 @@
 
 ### Get the ASM instance for this node from the /etc/oratab file
 ### The asm entry is maintained by the grid agent
-ORACLE_SID=`grep +ASM /etc/oratab | cut -d':' -f1`
+ORACLE_SID=`grep +ASM /var/opt/oracle/oratab | cut -d':' -f1`
 if [ "${ORACLE_SID}" == "" ]
 then
   ### no ASM instance found, assume clusterware installed without ASM
