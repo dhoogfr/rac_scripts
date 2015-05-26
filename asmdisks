@@ -47,8 +47,8 @@ prompt
 prompt =================== OVERVIEW OF ASM OPERATIONS ==================================
 Col name format a15
 Col pass format a10
-break on inst_id on name on operation
-select o.inst_id, g.name, o.operation, o.pass, o.state, o.sofar, o.est_work, o.est_minutes, power
+break on inst_id on name 
+select o.inst_id, g.name, o.pass, o.state, o.sofar, o.est_work, o.est_minutes, power
  from gv\$asm_diskgroup g, gv\$asm_operation o
  where o.inst_id = g.inst_id
        and o.group_number = g.group_number
