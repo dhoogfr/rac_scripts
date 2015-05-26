@@ -52,6 +52,7 @@ select o.inst_id, g.name, o.operation, o.pass, o.state, o.sofar, o.est_work, o.e
  from gv\$asm_diskgroup g, gv\$asm_operation o
  where o.inst_id = g.inst_id
        and o.group_number = g.group_number
+       and actual is not null
 order by
   o.inst_id,
   g.name,
