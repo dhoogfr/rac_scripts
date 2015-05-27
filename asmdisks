@@ -2,6 +2,7 @@
 #export ORACLE_HOME=/u01/app/11.2.0.3/grid
 #export PATH=$ORACLE_HOME/bin:$PATH
 . /u01/app/bin/gogrid
+unset SQLPATH
 sqlplus -s "/ as sysasm" <<EOF
 set pages 999
 set linesize 200
