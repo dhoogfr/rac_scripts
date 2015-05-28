@@ -4,8 +4,13 @@
 . /u01/app/bin/gogrid
 unset SQLPATH
 sqlplus -s "/ as sysasm" <<EOF
-set pages 999
+set serveroutput on size 1000000 format wrapped
+set trimspool on
+set tab off
+set long 5000
+set pagesize 50000
 set linesize 200
+
 prompt
 prompt
 prompt =================== OVERVIEW OF ASM DISKGROUPS ==================================
