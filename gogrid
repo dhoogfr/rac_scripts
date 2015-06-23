@@ -1,5 +1,14 @@
 #!/bin/bash
 
+### location of the oraenv script, normally in /usr/local/bin, but can differ
+_ORAENV=/usr/local/bin/oraenv
+
+### location of the oratab, normally in /etc, but can differ
+_ORATAB=/etc/oratab
+
+### location of the local registry
+_OLRLOC=/etc/oracle/olr.loc
+
 rval=0
 
 ### abuse a while loop to avoid a complicated if then construct when testing for errors, as exit can not be used in a sourced script (would kill the current shell)
@@ -24,16 +33,16 @@ do
     fi
   fi
 
-  ### Get the target instance for this node from the /etc/oratab file
+  ### Get the target instance for this node from the oratab file
   ### The asm entry is maintained by the grid agent
-  ORACLE_SID=$(egrep -e  "^\\${db_target}" /etc/oratab | cut -d':' -f1)
+  ORACLE_SID=$(egrep -e  "^\\${db_target}" ${_ORATAB} | cut -d':' -f1)
   if [ "${ORACLE_SID}" == "" ]
   then
     if [ ${db_target} == "+ASM" ]
     then
       ### no ASM instance found, assume clusterware installed without ASM
       OLDHOME=${ORACLE_HOME}
-      ORACLE_HOME=`awk -F'=' '/^crs_home=/ {print $2}' /etc/oracle/olr.loc`
+      ORACLE_HOME=`awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC}`
       export ORACLE_HOME
       unset ORA_DBNAME
       unset ORACLE_UNQNAME
@@ -70,7 +79,7 @@ do
       export ORACLE_BASE
     else
       rval=1
-      echo "MGMTDB target given, but not found in /etc/oratab"
+      echo "MGMTDB target given, but not found in ${_ORATAB}"
       break
     fi
   else
@@ -81,7 +90,7 @@ do
 
     ### call oraenv to set the environment
     ORAENV_ASK=NO
-    . /usr/local/bin/oraenv -s
+    . ${_ORAENV} -s
   fi
 
   ### all went ok, break out of the loop
