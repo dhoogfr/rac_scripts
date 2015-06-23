@@ -29,8 +29,8 @@ prompt ==================== OVERVIEW OF ASM DISKS ==============================
 set feed off
 Col path format a40
 Col label format a20
-Col failgroup format a9
-Col diskgroup format a10
+Col failgroup format a15
+Col diskgroup format a15
 Col state format a10
 Col total_mb format 999G999G990 heading "Total"
 Col used format 999G999G990 heading "Used"
