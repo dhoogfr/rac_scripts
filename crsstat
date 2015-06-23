@@ -10,7 +10,9 @@
 # Requirements:
 #   - $ORA_CRS_HOME should be set in your environment
 
-ORA_CRS_HOME=/u01/app/11.2.0.3/grid
+### location of the local registry
+_OLRLOC=/etc/oracle/olr.loc
+ORA_CRS_HOME=$(awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC})
 RSC_KEY=$1
 QSTAT=-u
 AWK=/bin/awk    # if not available use /usr/bin/awk
