@@ -1,5 +1,22 @@
 #!/bin/bash
 
+### This script sets the oracle environment variables for the grid infrastructure, based upon the settings in the /etc/oratab file and the configuration in the Grid Infrastructure.
+### It can be used on every (linux) setup where the GI is installed (rac, rac one node, oracle restart).
+### To use it you source the script and optionally pass +ASM or -MGMTDB to set the environments for grid infrastructure and the ASM or the MGMTDB instances. If no parameter is given, +ASM is assumed.
+### The script expects the oraenv script to be in the /usr/local/bin directory and the oratab file in /etc/. If not change the _ORAENV and _ORATAB variable in the beginning of the script
+###
+### It should not be used to setup the env variables for intances outside the GI home (so other then +ASM or -MGMTDB).
+### Use the godb script for this instead
+###
+###
+### The environment variable set are:
+###   - ORA_DBNAME:       Oracle database name (not when +ASM is specified and ASM is not used)
+###   - ORACLE_UNQNAME:   The oracle db unique name (not when +ASM is specified and ASM is not used)
+###   - ORACLE_SID:       The oracle instance name on this node (not when +ASM is specified and ASM is not used)
+###   - ORACLE_BASE:      The oracle db base directory for the given db
+###   - ORACLE_HOME:      The oracle home directory for the given db
+###   - PATH:             Removes the existing $ORACLE_HOME/bin from the PATH and adds the new $ORACLE_HOME/bin to it
+
 ### location of the oraenv script, normally in /usr/local/bin, but can differ
 _ORAENV=/usr/local/bin/oraenv
 
