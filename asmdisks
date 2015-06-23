@@ -1,7 +1,4 @@
-#export ORACLE_SID=+ASM1
-#export ORACLE_HOME=/u01/app/11.2.0.3/grid
-#export PATH=$ORACLE_HOME/bin:$PATH
-. /u01/app/bin/gogrid
+. /u01/toolbox/bin/gogrid
 unset SQLPATH
 sqlplus -s "/ as sysasm" <<EOF
 set serveroutput on size 1000000 format wrapped
