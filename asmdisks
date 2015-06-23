@@ -17,7 +17,7 @@ Col pctused format 9999 heading "%Usd"
 Col used format 999G999G990 heading "Used"
 Col total_mb format 999G999G990 heading "Total"
 select name, state, total_mb, (total_mb-free_mb) as used,
-       trunc(100*(total_mb-free_mb)/total_mb) as pctused,
+       case when total_mb=0 then 0 else trunc(100*(total_mb-free_mb)/total_mb) end as pctused,
        (select count(*) from v\$asm_disk
          where group_number = g.group_number) as nr_disks,
        type
