@@ -1,0 +1,13 @@
+_godb() 
+{
+    local cur prev dbs oratab
+    oratab=/etc/oratab
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    dbs=$(for x in `cut -s -d':' -f1 ${oratab} | grep -v '+' | grep -v '-' | grep -v '#'`; do echo ${x} ; done )
+    COMPREPLY=( $(compgen -W "${dbs}" -- ${cur}) )
+    return 0
+}
+complete -F _godb godb
+
