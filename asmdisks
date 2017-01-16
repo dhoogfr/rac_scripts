@@ -1,6 +1,6 @@
 . /u01/toolbox/bin/gogrid
 unset SQLPATH
-sqlplus -s "/ as sysasm" <<EOF
+sqlplus -s "/ as sysdba" <<EOF
 set serveroutput on size 1000000 format wrapped
 set trimspool on
 set tab off
