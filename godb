@@ -104,6 +104,10 @@ do
               $2=trim($2);
               print "ORA_TYPE="$2" ;"
             }
+            /Instance name prefix:/ {
+              $2=trim($2);
+              print "ORA_INSTANCE="$2" ;"
+            }
           '
        `
 
@@ -127,11 +131,24 @@ do
   then
     ### single instance, either on rac or oracle restart, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
     ORACLE_SID=${ORA_INSTANCE}
-  elif [ "${ORA_TYPE}" == "RAC" ] || [ "${ORA_TYPE}" == "RACOneNode" ]
+  elif [ "${ORA_TYPE}" == "RAC" ]
   then
     ### Oracle rac or rac OneNode
     ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
     ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
+  elif [ "${ORA_TYPE}" == "RACOneNode" ]
+  then
+    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | head -1`
+    if [ "${CRS_RESULT}" = "Database is not running." ]
+    then
+      ORACLE_SID=${ORA_INSTANCE}_1
+    else
+      ORACLE_SID=`echo ${CRS_RESULT} |grep \`hostname -s\` | cut -d' ' -f2`
+      if [ "${ORACLE_SID}" == "" ]
+      then
+        echo "${ORACLE_UNQNAME} is running on a different node"
+      fi
+    fi
   else
     ### unknown GI type, don't know what to do
     echo "Type: ${ORA_TYPE} is unknown to this script and it does not know what to do now"
@@ -140,7 +157,7 @@ do
   fi
 
   ### check if ORACLE_SID has been filled in
-  if [ "${ORACLE_SID}" == "" ]
+  if [ "${ORACLE_SID}" == "" ] && [ "${ORA_TYPE}" != "RACOneNode" ]
   then
     echo "ORACLE_SID has no value, something went wrong during parsing"
     rval=1
