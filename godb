@@ -130,23 +130,57 @@ do
   if [ "${ORA_TYPE}" == "SINGLE" ] || [ "${ORA_TYPE}" == "" ]
   then
     ### single instance, either on rac or oracle restart, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
-    ORACLE_SID=${ORA_INSTANCE}
+    ###    ORACLE_SID=${ORA_INSTANCE}
+    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\``
+    ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
+    ### check if this node is defined as target for this database
+    if [ "${ORACLE_SID}" =  "" ]
+    then
+      echo "No instance for DB ${ORACLE_UNQNAME} is defined for this node"
+      rval=1
+      break
+    fi
+    ### check if the instance is actually running
+    if [[ "${CRS_RESULT}" =~ "is not running" ]]
+    then
+      ### set a non zero rval, but continue
+      rval=2
+    fi
   elif [ "${ORA_TYPE}" == "RAC" ]
   then
     ### Oracle rac or rac OneNode
     ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
-    ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
+#    ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
+    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\``
+    ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
+    ### check if this node is defined as target for this database
+    if [ "${ORACLE_SID}" =  "" ]
+    then
+      echo "No instance for DB ${ORACLE_UNQNAME} is defined for this node"
+      rval=1
+      break
+    fi
+    ### check if the instance is actually running
+    if [[ "${CRS_RESULT}" =~ "is not running" ]]
+    then
+      ### set a non zero rval, but continue
+      rval=2
+    fi
   elif [ "${ORA_TYPE}" == "RACOneNode" ]
   then
     CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | head -1`
     if [ "${CRS_RESULT}" = "Database is not running." ]
     then
+      ### database is no running on any node, set the SID to the default <instance>_1
       ORACLE_SID=${ORA_INSTANCE}_1
+      rval=2
     else
       ORACLE_SID=`echo ${CRS_RESULT} |grep \`hostname -s\` | cut -d' ' -f2`
       if [ "${ORACLE_SID}" == "" ]
       then
         echo "${ORACLE_UNQNAME} is running on a different node"
+        rval=1
+        break
       fi
     fi
   else
