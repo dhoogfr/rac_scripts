@@ -108,6 +108,10 @@ do
               $2=trim($2);
               print "ORA_INSTANCE="$2" ;"
             }
+            /Candidate servers:/ {
+              $2=trim($2);
+              print "ORA_SERVER_LIST="$2" ;"
+            }
           '
        `
 
@@ -178,9 +182,16 @@ do
       ORACLE_SID=`echo ${CRS_RESULT} |grep \`hostname -s\` | cut -d' ' -f2`
       if [ "${ORACLE_SID}" == "" ]
       then
-        echo "${ORACLE_UNQNAME} is running on a different node"
-        rval=1
-        break
+        if [[  ${ORA_SERVER_LIST} =~ $(hostname -s) ]]
+        then
+          echo "${ORACLE_UNQNAME} is running on a different node"
+          rval=2
+          break
+        else
+          echo "${ORACLE_UNQNAME} is not configured for this node"
+          rval=1
+          break
+        fi
       fi
     fi
   else
