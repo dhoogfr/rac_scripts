@@ -1,17 +1,16 @@
 #!/bin/bash
 
-### This script sets the oracle environment variables, based upon the settings in the /etc/oratab file and the configuration in the Grid Infrastructure.
+### This script sets the oracle environment variables, based upon the configuration in the Grid Infrastructure.
 ### It can be used on every (linux) setup where the GI is installed (rac, rac one node, oracle restart).
 ### To use it you source the script and pass it the db unique name of the database for which you want the env variables to be set (. godb <db_unique_name>)
-### The script expects the oraenv script to be in the /usr/local/bin directory and the oratab file in /etc/. If not change the _ORAENV and _ORATAB variable in the beginning of the script
+### The script expects the oracle local registry to be /etc/oracle/olr.loc. If not change the _OLRLOC variable in the beginning of the script
 ###
 ### It should not be used to setup the env variables for the GI infrastructure itself.
 ### Use the gogrid script for this instead
 ###
 ###
-### This script extends the oraenv script from Oracle (which it uses internally) by allowing you to pass the db unique name (which oracle sets in the /etc/oratab file),
-### while it also sets the ORACLE_SID to the actual instance name (instead of the db unique name)
-### This makes it especially usefull for Oracle RAC and Oracle RAC One Node, but it also can be used in Oracle Restart environments or for single instance databases on RAC environments
+### This script replaces script from Oracle by allowing you to pass the db unique name, while it also sets the ORACLE_SID to the actual instance name (instead of the db unique name)
+### Making it especially usefull for Oracle RAC and Oracle RAC One Node, but it also can be used in Oracle Restart environments or for single instance databases on RAC environments
 ###
 ###
 ### The environment variable set are:
@@ -21,12 +20,22 @@
 ###   - ORACLE_BASE:      The oracle db base directory for the given db
 ###   - ORACLE_HOME:      The oracle home directory for the given db
 ###   - PATH:             Removes the existing $ORACLE_HOME/bin from the PATH and adds the new $ORACLE_HOME/bin to it
+###   - LD_LIBRARY_PATH:  Shared library path
+###
+###
+### Exit codes:
+###   0: OK
+###   1: Failure
+###      could be that the local registry does not exist, something went wrong with the srvctl command, the passed unique name does not exist
+###      or the database has no instance configured for the current node
+###   2: Warning
+###      The instance is not running on this node or in case of RAC One Node is running on the other node (or not running on any node)
+###
+###
 
-### location of the oraenv script, normally in /usr/local/bin, but can differ
-_ORAENV=/usr/local/bin/oraenv
 
-### location of the oratab, normally in /etc, but can differ
-_ORATAB=/etc/oratab
+### location of the local registry
+_OLRLOC=/etc/oracle/olr.loc
 
 rval=0
 
@@ -42,52 +51,56 @@ do
     break
   fi
 
-  ### set ORACLE_SID to the passed argument
-  ORACLE_SID=$1
- 
-  ### test if oraenv exists and is executable
-  if [[ ! -x "${_ORAENV}" ]]
+  ### set _DB_UNIQUE to the passed argument
+  _DB_UNIQUE=$1
+
+  ### store the ORACLE_HOME that is currently set in the environment, we will need to remove it from the PATH variable later on
+  OLDHOME=${ORACLE_HOME}
+
+  ### clean up existing env
+  unset ORA_DBNAME
+  unset ORACLE_UNQNAME
+  unset ORACLE_SID
+
+  ### test if the local registry exists and is readable
+  if [[ ! -r "${_OLRLOC}" ]]
   then
-    echo "oraenv script: ${_ORAENV} does not exist or is not executable by you"
+    echo "local registry file: ${_ORALOC}  does not exists or is not readable by you"
     rval=1
     break
   fi
 
-  ### test if the passed variable exists in the oratab file, to limit the chance that oraenv will prompt for input
-  if [[ ! -r "${_ORATAB}" ]]
-  then
-    echo "oratab file: ${_ORATAB}  does not exists or is not readable by you"
-    rval=1
-    break
-  fi
-  DB_CNT=$(egrep "^${ORACLE_SID}:" ${_ORATAB} |wc -l)
-  if [ ${DB_CNT} -ne 1 ]
-  then
-    echo "passed db unique name was not found in the ${_ORATAB} file or found more than once"
-    rval=1
-    break
-  fi
-
-  ### execute the oraenv script
-  ORAENV_ASK=NO
-  . ${_ORAENV} -s
+  ### set the CRS_HOME variable
+  CRS_HOME=`awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC}`
 
   ### test if srvctl exists and is executable
-  if  [[ ! -x "${ORACLE_HOME}/bin/srvctl" ]]
+  if  [[ ! -x "${CRS_HOME}/bin/srvctl" ]]
   then
     echo "srvctl could not be found or is not executable by you"
     rval=1
     break
   fi
 
-  ### run srvctl and parse the output for the unique name, the db name, the instance name and the type
+  ### test if the passed db unique name is known in the cluster registry
+  if [ "$(${CRS_HOME}/bin/srvctl config database | grep -x ${_DB_UNIQUE} -c)" -ne 1 ]
+  then
+    echo "Passed DB Unique Name is not known in the cluster registry"
+    rval=1
+    break
+  fi
+
+  ### run srvctl and parse the output for the Home, the unique name, the db name, the instance name and the type
   ### instance name will only be filled in when this is an single instance on RAC or Oracle Restart
   ### db name can be null if the db name is not different from the db unique name
-  eval `srvctl config database -d ${ORACLE_SID} |
+  eval `${CRS_HOME}/bin/srvctl config database -d ${_DB_UNIQUE} |
           awk -F':' '
             function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
             function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
             function trim(s) { return rtrim(ltrim(s)); }
+            /Oracle home:/ {
+              $2=trim($2);
+              print "ORACLE_HOME="$2" ;"
+            }
             /Database unique name:/ {
               $2=trim($2);
               print "ORACLE_UNQNAME="$2" ;"
@@ -123,24 +136,57 @@ do
     break
   fi
 
+  ### set the ORACLE_HOME, LD_LIBRARY_PATH and PATH variables
+  ### don't use the oraenv script as the oratab file is no longer maintained by the ora_agent in 12.2
+  export ORACLE_HOME
+
+  ###Reset LD_LIBRARY_PATH
+  case ${LD_LIBRARY_PATH:-""} in
+      *$OLDHOME/lib*)     LD_LIBRARY_PATH=`echo $LD_LIBRARY_PATH | \
+                              sed "s;$OLDHOME/lib;$ORACLE_HOME/lib;g"` ;;
+      *$ORACLE_HOME/lib*) ;;
+      "")                 LD_LIBRARY_PATH=$ORACLE_HOME/lib ;;
+      *)                  LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH ;;
+  esac
+  export LD_LIBRARY_PATH
+
+  case "$OLDHOME" in
+    "") OLDHOME=$PATH ;;        #This makes it so that null OLDHOME can't match
+  esac                            #anything in next case statement
+
+  case "$PATH" in
+    *$OLDHOME/bin*)     PATH=`echo $PATH | \
+                              sed "s;$OLDHOME/bin;$ORACLE_HOME/bin;g"` ;;
+    *$ORACLE_HOME/bin*) ;;
+    *:)                 PATH=${PATH}$ORACLE_HOME/bin: ;;
+    "")                 PATH=$ORACLE_HOME/bin ;;
+    *)                  PATH=$PATH:$ORACLE_HOME/bin ;;
+  esac
+  export PATH
+
+  ### set the ORACLE_BASE (unset it first otherwise the orabase utility will just return the current value)
+  unset ORACLE_BASE
+  ORACLE_BASE=`$ORACLE_HOME/bin/orabase`
+  export ORACLE_BASE
+
+
   ### The db name is not mandatory in the GI config if it does not differ from the unique name
   ### So, when it is empty, set it to the ORACLE_UNQNAME
   if [ "${ORA_DBNAME}" == "" ]
   then
     ORA_DBNAME=${ORACLE_UNQNAME}
   fi
-    
+
   ### Test for the type of db (rac, rac one or single instance)
   if [ "${ORA_TYPE}" == "SINGLE" ] || [ "${ORA_TYPE}" == "" ]
   then
     ### single instance, either on rac or oracle restart, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
-    ###    ORACLE_SID=${ORA_INSTANCE}
-    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\``
+    CRS_RESULT=`${CRS_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | grep \`hostname -s\``
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
     ### check if this node is defined as target for this database
     if [ "${ORACLE_SID}" =  "" ]
     then
-      echo "No instance for DB ${ORACLE_UNQNAME} is defined for this node"
+      echo "No instance for DB ${_DB_UNIQUE} is defined for this node"
       rval=1
       break
     fi
@@ -153,14 +199,13 @@ do
   elif [ "${ORA_TYPE}" == "RAC" ]
   then
     ### Oracle rac or rac OneNode
-    ### store the db unique name in the ORACLE_UNQNAME variable and the database name in ORA_DBNAME
-#    ORACLE_SID=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\` | cut -d' ' -f2`
-    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\``
+    ### get the db instance status for the current node
+    CRS_RESULT=`${CRS_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | grep \`hostname -s\``
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
     ### check if this node is defined as target for this database
     if [ "${ORACLE_SID}" =  "" ]
     then
-      echo "No instance for DB ${ORACLE_UNQNAME} is defined for this node"
+      echo "No instance for DB ${_DB_UNIQUE} is defined for this node"
       rval=1
       break
     fi
@@ -172,7 +217,7 @@ do
     fi
   elif [ "${ORA_TYPE}" == "RACOneNode" ]
   then
-    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | head -1`
+    CRS_RESULT=`${CRS_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | head -1`
     if [ "${CRS_RESULT}" = "Database is not running." ]
     then
       ### database is no running on any node, set the SID to the default <instance>_1
@@ -184,11 +229,11 @@ do
       then
         if [[  ${ORA_SERVER_LIST} =~ $(hostname -s) ]]
         then
-          echo "${ORACLE_UNQNAME} is running on a different node"
+          echo "${_DB_UNIQUE} is running on a different node"
           rval=2
           break
         else
-          echo "${ORACLE_UNQNAME} is not configured for this node"
+          echo "${_DB_UNIQUE} is not configured for this node"
           rval=1
           break
         fi
@@ -208,7 +253,7 @@ do
     rval=1
     break
   fi
-  
+
   ### export the set oracle variables
   export ORACLE_UNQNAME ORA_DBNAME ORACLE_SID
 
@@ -217,12 +262,12 @@ do
 done
 
 ### unset some temporary variables
-unset ORAENV_ASK
 unset ORA_INSTANCE
 unset ORA_TYPE
 unset _ORAENV
 unset DB_CNT
 unset _ORATAB
+unset _DB_UNIQUE
 
 ### return rval
 return ${rval}
