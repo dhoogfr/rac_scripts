@@ -178,10 +178,29 @@ do
   fi
 
   ### Test for the type of db (rac, rac one or single instance)
-  if [ "${ORA_TYPE}" == "SINGLE" ] || [ "${ORA_TYPE}" == "" ]
+  if  [ "${ORA_TYPE}" == "" ]
   then
-    ### single instance, either on rac or oracle restart, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
-    CRS_RESULT=`${CRS_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | grep \`hostname -s\``
+    ### Oracle Restart installation
+    CRS_RESULT=$(srvctl status database -d ${_DB_UNIQUE})
+    if  [ "${CRS_RESULT}" == "Database is running." ]
+    then
+      ORACLE_SID=${ORA_INSTANCE}
+    elif [ "${CRS_RESULT}" == "Database is not running." ]
+    then
+      ORACLE_SID=${ORA_INSTANCE}
+      ### set a non zero rval, but continue
+      rval=2        
+    else
+      ### should never get here, because of earlier check on oracle_unqname result
+      echo "DB ${_DB_UNIQUE} is not defined for this node"
+      rval=1
+      break        
+    fi
+  elif [ "${ORA_TYPE}" == "SINGLE" ]
+  then
+    CRS_RESULT=$(srvctl status database -d ${_DB_UNIQUE})
+    ### single instance on RAC
+    CRS_RESULT=$(echo ${CRS_RESULT} | grep \`hostname -s\`)
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
     ### check if this node is defined as target for this database
     if [ "${ORACLE_SID}" =  "" ]
@@ -266,7 +285,6 @@ unset ORA_INSTANCE
 unset ORA_TYPE
 unset _ORAENV
 unset DB_CNT
-unset _ORATAB
 unset _DB_UNIQUE
 
 ### return rval
