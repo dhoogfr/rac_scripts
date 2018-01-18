@@ -118,7 +118,7 @@ do
   ### the ORACLE_UNQNAME should always be filled in, if not, something went wrong in the srvctl command or in the parsing
   if [ "${ORACLE_UNQNAME}" == "" ]
   then
-    echo "Something went wrong in executing srvctl, or the output was not parsed correctly"
+    echo "Something went wrong in executing srvctl, the database does not exists or the output was not parsed correctly"
     rval=1
     break
   fi
@@ -131,11 +131,29 @@ do
   fi
     
   ### Test for the type of db (rac, rac one or single instance)
-  if [ "${ORA_TYPE}" == "SINGLE" ] || [ "${ORA_TYPE}" == "" ]
+  if  [ "${ORA_TYPE}" == "" ]
   then
-    ### single instance, either on rac or oracle restart, set the ORACLE_SID to the retrieved ORA_INSTANCE variable
-    ###    ORACLE_SID=${ORA_INSTANCE}
-    CRS_RESULT=`srvctl status database -d ${ORACLE_SID} | grep \`hostname -s\``
+    ### Oracle Restart installation
+    CRS_RESULT=$(srvctl status database -d ${ORACLE_SID})
+    if  [ "${CRS_RESULT}" == "Database is running." ]
+    then
+      ORACLE_SID=${ORA_INSTANCE}
+    elif [ "${CRS_RESULT}" == "Database is not running." ]
+    then
+      ORACLE_SID=${ORA_INSTANCE}
+      ### set a non zero rval, but continue
+      rval=2        
+    else
+      ### should never get here, because of earlier check on oracle_unqname result
+      echo "DB ${ORACLE_UNQNAME} is not defined for this node"
+      rval=1
+      break        
+    fi
+  elif [ "${ORA_TYPE}" == "SINGLE" ]
+  then
+    CRS_RESULT=$(srvctl status database -d ${ORACLE_SID})
+    ### single instance on RAC
+    CRS_RESULT=$(echo ${CRS_RESULT} | grep \`hostname -s\`)
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
     ### check if this node is defined as target for this database
     if [ "${ORACLE_SID}" =  "" ]
