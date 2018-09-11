@@ -1,0 +1,9 @@
+*       text=auto
+*.txt   text
+*.sql   text
+*.pkb   text
+*.pks   text
+*.sh  text eol=lf
+*.py  text
+*.pl  text
+
