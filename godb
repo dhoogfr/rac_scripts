@@ -1,4 +1,4 @@
-#!/bin/bash
+/SINGLE#!/bin/bash
 
 ### This script sets the oracle environment variables, based upon the configuration in the Grid Infrastructure.
 ### It can be used on every (linux) setup where the GI is installed (rac, rac one node, oracle restart).
@@ -200,7 +200,7 @@ do
   then
     CRS_RESULT=$(srvctl status database -d ${_DB_UNIQUE})
     ### single instance on RAC
-    CRS_RESULT=$(echo ${CRS_RESULT} | grep \`hostname -s\`)
+    CRS_RESULT=$(echo ${CRS_RESULT} | grep $(hostname -s))
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
     ### check if this node is defined as target for this database
     if [ "${ORACLE_SID}" =  "" ]
