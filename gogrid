@@ -32,6 +32,7 @@ rval=0
 while true
 do
 
+  ### check the passed db_target
   if [ "$1" == "" ]
   then
     ### no target given, assume ASM
@@ -50,64 +51,72 @@ do
     fi
   fi
 
-  ### Get the target instance for this node from the oratab file
-  ### The asm entry is maintained by the grid agent
-  ORACLE_SID=$(egrep -e  "^\\${db_target}" ${_ORATAB} | cut -d':' -f1)
-  if [ "${ORACLE_SID}" == "" ]
+  ### general part to set the clusterware home, path and ld_library_path
+  OLDHOME=${ORACLE_HOME}
+  ORACLE_HOME=`awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC}`
+  export ORACLE_HOME
+  unset ORA_DBNAME
+  unset ORACLE_UNQNAME
+      
+  ### the following was nicked from the oraenv script and resets the LD_LIBRARY_PATH and PATH variables
+      
+  ###Reset LD_LIBRARY_PATH
+  case ${LD_LIBRARY_PATH:-""} in
+      *$OLDHOME/lib*)     LD_LIBRARY_PATH=`echo $LD_LIBRARY_PATH | \
+                              sed "s;$OLDHOME/lib;$ORACLE_HOME/lib;g"` ;;
+      *$ORACLE_HOME/lib*) ;;
+      "")                 LD_LIBRARY_PATH=$ORACLE_HOME/lib ;;
+      *)                  LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH ;;
+  esac
+  export LD_LIBRARY_PATH
+
+  case "$OLDHOME" in
+    "") OLDHOME=$PATH ;;        #This makes it so that null OLDHOME can't match
+  esac                            #anything in next case statement
+
+  case "$PATH" in
+    *$OLDHOME/bin*)     PATH=`echo $PATH | \
+                              sed "s;$OLDHOME/bin;$ORACLE_HOME/bin;g"` ;;
+    *$ORACLE_HOME/bin*) ;;
+    *:)                 PATH=${PATH}$ORACLE_HOME/bin: ;;
+    "")                 PATH=$ORACLE_HOME/bin ;;
+    *)                  PATH=$PATH:$ORACLE_HOME/bin ;;
+  esac
+  export PATH 
+
+  ### set the ORACLE_BASE (unset it first otherwise the orabase utility will just return the current value)
+  unset ORACLE_BASE
+  ORACLE_BASE=`$ORACLE_HOME/bin/orabase`
+  export ORACLE_BASE
+
+  if [ ${db_target} == "+ASM" ]
   then
-    if [ ${db_target} == "+ASM" ]
+    ### check if there is an ASM instance running on this node
+    ORACLE_SID=$(${ORACLE_HOME}/bin/srvctl status asm -detail | grep "on node $(hostname --short)" | cut -d' ' -f3)
+    if [ "${ORACLE_SID}" == "" ]
     then
-      ### no ASM instance found, assume clusterware installed without ASM
-      OLDHOME=${ORACLE_HOME}
-      ORACLE_HOME=`awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC}`
-      export ORACLE_HOME
-      unset ORA_DBNAME
-      unset ORACLE_UNQNAME
-      
-      ### the following was nicked from the oraenv script and resets the LD_LIBRARY_PATH and PATH variables
-      
-      ###Reset LD_LIBRARY_PATH
-      case ${LD_LIBRARY_PATH:-""} in
-          *$OLDHOME/lib*)     LD_LIBRARY_PATH=`echo $LD_LIBRARY_PATH | \
-                                  sed "s;$OLDHOME/lib;$ORACLE_HOME/lib;g"` ;;
-          *$ORACLE_HOME/lib*) ;;
-          "")                 LD_LIBRARY_PATH=$ORACLE_HOME/lib ;;
-          *)                  LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH ;;
-      esac
-      export LD_LIBRARY_PATH
-
-      case "$OLDHOME" in
-        "") OLDHOME=$PATH ;;        #This makes it so that null OLDHOME can't match
-      esac                            #anything in next case statement
-
-      case "$PATH" in
-        *$OLDHOME/bin*)     PATH=`echo $PATH | \
-                                  sed "s;$OLDHOME/bin;$ORACLE_HOME/bin;g"` ;;
-        *$ORACLE_HOME/bin*) ;;
-        *:)                 PATH=${PATH}$ORACLE_HOME/bin: ;;
-        "")                 PATH=$ORACLE_HOME/bin ;;
-        *)                  PATH=$PATH:$ORACLE_HOME/bin ;;
-      esac
-      export PATH 
-
-      ### set the ORACLE_BASE (unset it first otherwise the orabase utility will just return the current value)
-      unset ORACLE_BASE
-      ORACLE_BASE=`$ORACLE_HOME/bin/orabase`
-      export ORACLE_BASE
+      ### no ASM instance found running on this host, either clusterware without ASM or only ASM proxy running here
+      unset ORACLE_SID
     else
-      rval=1
-      echo "MGMTDB target given, but not found in ${_ORATAB}"
-      break
+      ORA_DBNAME=+ASM
+      ORACLE_UNQNAME=${ORA_DBNAME}
+      export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
     fi
   else
-    ### trim the number from the ORACLE_SID to get the cluster name, not required for MGMTDB target, but testing for it would be as expensive
-    ORA_DBNAME=`echo ${ORACLE_SID} |tr -d [:digit:]`
-    ORACLE_UNQNAME=${ORA_DBNAME}
-    export ORA_DBNAME ORACLE_UNQNAME
-
-    ### call oraenv to set the environment
-    ORAENV_ASK=NO
-    . ${_ORAENV} -s
+    ### if not +ASM, then it must be -MGMTDB
+    ### must get first a system with mgmtdb to test with
+    ORACLE_SID=$(${ORACLE_HOME}/bin/srvctl status mgmtdb | grep "on node $(hostname --short)" | cut -d' ' -f2)
+    if [ "${ORACLE_SID}" == "" ]
+    then
+      ### either mgmtdb is not configured or not active on this node
+      unset ORACLE_SID
+      echo "Either there is no MGMTDB configured or the instance is currently not running on this node"
+      rval=2
+    else
+      ORA_DBNAME=ORACLE_SID
+      ORACLE_UNQNAME=${ORA_DBNAME}
+      export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
+    fi    
   fi
 
   ### all went ok, break out of the loop
@@ -116,7 +125,6 @@ do
 done
 
 ### Cleanup
-unset ORAENV_ASK
 unset db_target
 
 ### return rval
