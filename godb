@@ -1,4 +1,4 @@
-/SINGLE#!/bin/bash
+#!/bin/bash
 
 ### This script sets the oracle environment variables, based upon the configuration in the Grid Infrastructure.
 ### It can be used on every (linux) setup where the GI is installed (rac, rac one node, oracle restart).
@@ -73,34 +73,40 @@ do
   ### set the CRS_HOME variable
   CRS_HOME=`awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC}`
 
-  ### test if srvctl exists and is executable
+  ### test if grid srvctl exists and is executable
   if  [[ ! -x "${CRS_HOME}/bin/srvctl" ]]
   then
-    echo "srvctl could not be found or is not executable by you"
+    echo "grid srvctl could not be found or is not executable by you"
     rval=1
     break
   fi
 
-  ### test if the passed db unique name is known in the cluster registry
-  if [ "$(${CRS_HOME}/bin/srvctl config database | grep -x ${_DB_UNIQUE} -c)" -ne 1 ]
+  ### test if the passed db unique name is known in the cluster registry and get the DB Home
+  ORACLE_HOME=$(${CRS_HOME}/bin/srvctl config database -verbose | grep ${_DB_UNIQUE} | cut -f 2)
+  if [ -z ${ORACLE_HOME} ]
   then
     echo "Passed DB Unique Name is not known in the cluster registry"
     rval=1
     break
   fi
 
+  ### test if db srvctl exists and is executable
+  if  [[ ! -x "${ORACLE_HOME}/bin/srvctl" ]]
+  then
+    echo "db srvctl could not be found or is not executable by you"
+    rval=1
+    break
+  fi
+
+
   ### run srvctl and parse the output for the Home, the unique name, the db name, the instance name and the type
   ### instance name will only be filled in when this is an single instance on RAC or Oracle Restart
   ### db name can be null if the db name is not different from the db unique name
-  eval `${CRS_HOME}/bin/srvctl config database -d ${_DB_UNIQUE} |
+  eval `${ORACLE_HOME}/bin/srvctl config database -d ${_DB_UNIQUE} |
           awk -F':' '
             function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
             function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
             function trim(s) { return rtrim(ltrim(s)); }
-            /Oracle home:/ {
-              $2=trim($2);
-              print "ORACLE_HOME="$2" ;"
-            }
             /Database unique name:/ {
               $2=trim($2);
               print "ORACLE_UNQNAME="$2" ;"
@@ -181,7 +187,7 @@ do
   if  [ "${ORA_TYPE}" == "" ]
   then
     ### Oracle Restart installation
-    CRS_RESULT=$(srvctl status database -d ${_DB_UNIQUE})
+    CRS_RESULT=$(${ORACLE_HOME}/bin/srvctl status database -d ${_DB_UNIQUE})
     if  [ "${CRS_RESULT}" == "Database is running." ]
     then
       ORACLE_SID=${ORA_INSTANCE}
@@ -198,7 +204,7 @@ do
     fi
   elif [ "${ORA_TYPE}" == "SINGLE" ]
   then
-    CRS_RESULT=$(srvctl status database -d ${_DB_UNIQUE})
+    CRS_RESULT=$(${ORACLE_HOME}/bin/srvctl status database -d ${_DB_UNIQUE})
     ### single instance on RAC
     CRS_RESULT=$(echo ${CRS_RESULT} | grep $(hostname -s))
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
@@ -219,7 +225,7 @@ do
   then
     ### Oracle rac or rac OneNode
     ### get the db instance status for the current node
-    CRS_RESULT=`${CRS_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | grep \`hostname -s\``
+    CRS_RESULT=`${ORACLE_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | grep \`hostname -s\``
     ORACLE_SID=`echo ${CRS_RESULT} | cut -d' ' -f2`
     ### check if this node is defined as target for this database
     if [ "${ORACLE_SID}" =  "" ]
@@ -236,7 +242,7 @@ do
     fi
   elif [ "${ORA_TYPE}" == "RACOneNode" ]
   then
-    CRS_RESULT=`${CRS_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | head -1`
+    CRS_RESULT=`${ORACLE_HOME}/bin/srvctl status database -d ${_DB_UNIQUE} | head -1`
     if [ "${CRS_RESULT}" = "Database is not running." ]
     then
       ### database is no running on any node, set the SID to the default <instance>_1
