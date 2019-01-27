@@ -26,6 +26,9 @@ _ORATAB=/etc/oratab
 ### location of the local registry
 _OLRLOC=/etc/oracle/olr.loc
 
+### location of the ocr
+_OCRLOC=/etc/oracle/ocr.loc
+
 rval=0
 
 ### abuse a while loop to avoid a complicated if then construct when testing for errors, as exit can not be used in a sourced script (would kill the current shell)
@@ -51,15 +54,18 @@ do
     fi
   fi
 
+  ### determine if this an oracle restart configuration (TRUE) or a rac (FALSE)
+  _IS_RESTART=$(grep local_only ${_OCRLOC} | cut -d'=' -f2)
+
   ### general part to set the clusterware home, path and ld_library_path
   OLDHOME=${ORACLE_HOME}
   ORACLE_HOME=`awk -F'=' '/^crs_home=/ {print $2}' ${_OLRLOC}`
   export ORACLE_HOME
   unset ORA_DBNAME
   unset ORACLE_UNQNAME
-      
+
   ### the following was nicked from the oraenv script and resets the LD_LIBRARY_PATH and PATH variables
-      
+
   ###Reset LD_LIBRARY_PATH
   case ${LD_LIBRARY_PATH:-""} in
       *$OLDHOME/lib*)     LD_LIBRARY_PATH=`echo $LD_LIBRARY_PATH | \
@@ -82,7 +88,7 @@ do
     "")                 PATH=$ORACLE_HOME/bin ;;
     *)                  PATH=$PATH:$ORACLE_HOME/bin ;;
   esac
-  export PATH 
+  export PATH
 
   ### set the ORACLE_BASE (unset it first otherwise the orabase utility will just return the current value)
   unset ORACLE_BASE
@@ -91,16 +97,56 @@ do
 
   if [ ${db_target} == "+ASM" ]
   then
-    ### check if there is an ASM instance running on this node
-    ORACLE_SID=$(${ORACLE_HOME}/bin/srvctl status asm -detail | grep "on node $(hostname --short)" | cut -d' ' -f3)
-    if [ "${ORACLE_SID}" == "" ]
+
+    if [ "${_IS_RESTART}" == "TRUE" ]
     then
-      ### no ASM instance found running on this host, either clusterware without ASM or only ASM proxy running here
-      unset ORACLE_SID
+      ### check if an ASM resource exists
+      _ASM_NAME=$(${ORACLE_HOME}/bin/crsctl stat res -w "TYPE = ora.asm.type" | grep NAME | cut -d'.' -f2 | tr "[a-z]" "[A-Z]")
+      if [ -z ${_ASM_NAME} ]
+      then
+        ### no ASM
+        unset ORACLE_SID
+      else
+        ORACLE_SID=+${_ASM_NAME}
+        ORA_DBNAME=${ORACLE_SID}
+        ORACLE_UNQNAME=${ORA_DBNAME}
+        export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
+      fi
     else
-      ORA_DBNAME=+ASM
-      ORACLE_UNQNAME=${ORA_DBNAME}
-      export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
+      ### check if this is a flex cluster (returns 0 if this is a flex cluster)
+      _IS_FLEX=$(${ORACLE_HOME}/bin/crsctl get cluster mode status | grep -v flex -c)
+      ### if this is a flex cluster
+      if [ ${_IS_FLEX} -eq 0 ]
+      then
+        ### check if there is an ASM instance running on this node
+        ORACLE_SID=$(${ORACLE_HOME}/bin/srvctl status asm -detail | grep "on node $(hostname --short)" | cut -d' ' -f3)
+        if [ "${ORACLE_SID}" == "" ]
+        then
+          ### no ASM instance found running on this host, either clusterware without ASM or only ASM proxy running here
+          unset ORACLE_SID
+        else
+          ORA_DBNAME=+ASM
+          ORACLE_UNQNAME=${ORA_DBNAME}
+          export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
+        fi
+      else
+        ### this is a standard cluster
+
+        ### check if an ASM resource exists
+        _ASM_NAME=$(${ORACLE_HOME}/bin/crsctl stat res -w "TYPE = ora.asm.type" | grep NAME | cut -d'.' -f2 | tr "[a-z]" "[A-Z]")
+        if [ -z ${_ASM_NAME} ]
+        then
+          ### no ASM
+          unset ORACLE_SID
+        else
+          ### get the number of this node to create the instance name
+          _NODE_NR=$(${ORACLE_HOME}/bin/olsnodes -n -l | cut -f2)
+          ORA_DBNAME=+${_ASM_NAME}
+          ORACLE_UNQNAME=${ORA_DBNAME}
+          ORACLE_SID=${ORA_DBNAME}${_NODE_NR}
+          export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
+        fi
+      fi
     fi
   else
     ### if not +ASM, then it must be -MGMTDB
@@ -116,7 +162,7 @@ do
       ORA_DBNAME=ORACLE_SID
       ORACLE_UNQNAME=${ORA_DBNAME}
       export ORA_DBNAME ORACLE_UNQNAME ORACLE_SID
-    fi    
+    fi
   fi
 
   ### all went ok, break out of the loop
