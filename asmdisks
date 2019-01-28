@@ -1,4 +1,4 @@
-. /u01/toolbox/bin/gogrid
+. /u01/toolbox/rac_scripts/gogrid
 unset SQLPATH
 sqlplus -s "/ as sysdba" <<EOF
 set serveroutput on size 1000000 format wrapped

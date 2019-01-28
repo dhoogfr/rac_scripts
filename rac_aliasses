@@ -1,7 +1,7 @@
 #these aliasses are usefull in oracle rac environments.
 #source this file into the .bashrc file of the oracle / grid owner (and whichever other user that may benifit from them)
-alias godb='. /u01/toolbox/bin/godb'
-alias gogrid='. /u01/toolbox/bin/gogrid'
+alias godb='. /u01/toolbox/rac_scripts/godb'
+alias gogrid='. /u01/toolbox/rac_scripts/gogrid'
 alias cd_trace='cd ${ORACLE_BASE}/diag/`if [[ "${ORACLE_UNQNAME}" =~ "ASM" ]]; then echo asm; else echo rdbms; fi`/`echo ${ORACLE_UNQNAME}|tr [:upper:] [:lower:]`/${ORACLE_SID}/trace/'
 alias tail_alert='tail -f ${ORACLE_BASE}/diag/`if [[ "${ORACLE_UNQNAME}" =~ "ASM" ]]; then echo asm; else echo rdbms; fi`/`echo ${ORACLE_UNQNAME}|tr [:upper:] [:lower:]`/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log'
 alias vi_alert='vi ${ORACLE_BASE}/diag/`if [[ "${ORACLE_UNQNAME}" =~ "ASM" ]]; then echo asm; else echo rdbms; fi`/`echo ${ORACLE_UNQNAME}|tr [:upper:] [:lower:]`/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log'
