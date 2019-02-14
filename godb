@@ -102,7 +102,7 @@ do
   ### run srvctl and parse the output for the Home, the unique name, the db name, the instance name and the type
   ### instance name will only be filled in when this is an single instance on RAC or Oracle Restart
   ### db name can be null if the db name is not different from the db unique name
-  eval `${ORACLE_HOME}/bin/srvctl config database -d ${_DB_UNIQUE} |
+  eval `ORACLE_HOME=${ORACLE_HOME} ${ORACLE_HOME}/bin/srvctl config database -d ${_DB_UNIQUE} |
           awk -F':' '
             function ltrim(s) { sub(/^[ \t\r\n]+/, "", s); return s }
             function rtrim(s) { sub(/[ \t\r\n]+$/, "", s); return s }
